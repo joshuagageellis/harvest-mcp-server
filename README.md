@@ -1,6 +1,6 @@
 # Forecast/Harvest MCP Server
 
-An MCP (Model Context Protocol) server that exposes Harvest API data to AI assistants such as Claude. It provides read access to projects, users, and user assignments, with write operations available but disabled by default.
+A MCP (Model Context Protocol) server that exposes Harvest API data to AI assistants such as Claude. It provides read access to projects, users, and user assignments, with write operations available but disabled by default.
 
 ## Prerequisites
 
@@ -86,6 +86,27 @@ export const TOOLS_CONFIG = {
 ```
 
 After changing the configuration, rebuild the project and Docker image for the changes to take effect.
+
+## Using a Pre-built Image from GitHub Actions
+
+Every pull request and merge to `main` produces a Docker image artifact. This is the easiest way to get started without needing Node.js or a local build environment.
+
+1. Go to the **Actions** tab in the GitHub repository.
+2. Select the latest passing **Build Docker Image** workflow run.
+3. Under **Artifacts**, download `forecast-mcp-docker-image`.
+4. Unzip the downloaded file and load the image into Docker:
+
+```bash
+docker load < forecast-mcp.tar.gz
+```
+
+5. Verify the image is available:
+
+```bash
+docker images forecast-mcp
+```
+
+You can then use the image in your Claude Desktop configuration as described below.
 
 ## Claude Desktop Configuration
 
