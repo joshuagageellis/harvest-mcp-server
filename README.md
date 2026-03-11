@@ -63,10 +63,6 @@ export const TOOLS_CONFIG = {
     description: 'Retrieve a specific project by ID',
     enabled: true,
   },
-  create_project: {
-    description: 'Create a new project',
-    enabled: false,
-  },
   // ── Users ─────────────────────────────────────────────────────────────────
   list_users: {
     description: 'List all users, optionally filtered by active status',
