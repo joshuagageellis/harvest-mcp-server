@@ -1,0 +1,4 @@
+.env
+.claude/
+build/
+node_modules/
