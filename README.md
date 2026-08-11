@@ -2,13 +2,14 @@
 
 A MCP (Model Context Protocol) server that exposes Harvest API data to AI assistants such as Claude. It provides read access to projects, tasks, users, user assignments, time entries, and time reports.
 
-Time reports can optionally include scheduled hours from Forecast: pass `include_forecast: true` to `report_time_projects` or `report_time_team` to return a `scheduled_hours` field alongside tracked hours. This requires the Harvest account to be connected to Forecast.
+Every tool is read-only. The shared fetch helper issues `GET` requests only, so Harvest's write endpoints (create, update, delete, and the timer restart/stop actions) are deliberately not exposed.
 
 ## Prerequisites
 
-- Node.js 20 or later
-- Docker (for containerised deployment)
-- A Harvest account with API credentials
+- Node.js 20 or later — [`.nvmrc`](.nvmrc) pins the version used for local development
+- pnpm (the repo sets `packageManager`, so `corepack enable` is enough)
+- Docker, for containerised deployment
+- A Harvest account with API credentials, and a `manager` or `administrator` role
 
 ## Environment Variables
 
@@ -17,142 +18,82 @@ Time reports can optionally include scheduled hours from Forecast: pass `include
 | `HarvestAccountID`    | Your Harvest account ID            |
 | `AuthorizationBearer` | Your Harvest personal access token |
 
-## Building Locally
+Both are read at startup in [`src/config.ts`](src/config.ts). Create them at https://id.getharvest.com/developers.
 
-Install dependencies and compile the TypeScript source:
+## Building
 
 ```bash
-npm install
-npm run build
+pnpm install
+pnpm run typecheck   # tsc --noEmit
+pnpm run build       # bundles to build/index.mjs via esbuild
 ```
 
-This outputs a bundled `build/index.mjs` using esbuild.
+The build is a single ESM bundle, so the Docker image needs nothing but that one file. `pnpm run typecheck` is the same check CI runs.
 
-To build the Docker image, run the provided script:
+To rebuild the container from scratch — this removes any existing `forecast-mcp` container and image, rebuilds the bundle, then builds a fresh image tagged `forecast-mcp`:
 
 ```bash
 ./docker-build.sh
 ```
 
-This will remove any existing `forecast-mcp` container and image, run `npm run build`, then build a fresh Docker image tagged `forecast-mcp`.
-
-You can also build the image directly:
-
-```bash
-npm run build
-docker build -t forecast-mcp .
-```
-
 ## Available Tools
 
-Every tool is read-only. The shared fetch helper issues `GET` requests only, so Harvest's write endpoints (create, update, delete, and the timer restart/stop actions) are deliberately not exposed. You can enable or disable individual tools in `src/index.ts` by toggling the `enabled` flag:
+| Area             | Tools                                                                                  |
+| ---------------- | -------------------------------------------------------------------------------------- |
+| Connection       | `test_harvest_api`                                                                     |
+| Projects         | `list_projects`, `get_project`                                                          |
+| Tasks            | `list_tasks`, `get_task`                                                                |
+| Users            | `list_users`, `get_user`, `get_current_user`                                            |
+| User assignments | `list_user_assignments`                                                                 |
+| Time entries     | `list_time_entries`, `get_time_entry`                                                   |
+| Time reports     | `report_time_clients`, `report_time_projects`, `report_time_tasks`, `report_time_team`  |
+
+Each tool's description and its full set of parameters are the single source of truth in the code, and are what the AI assistant actually sees:
+
+- **Descriptions and enable/disable flags** — `TOOLS_CONFIG` in [`src/index.ts`](src/index.ts)
+- **Parameters and validation schemas** — `registerTools` in [`src/tools.ts`](src/tools.ts)
+
+### Scheduled Forecast hours
+
+`report_time_projects` and `report_time_team` accept `include_forecast: true`, which adds a `scheduled_hours` field alongside the tracked hours. This requires the Harvest account to be connected to Forecast; the field is `null` when there are no Forecast assignments.
+
+### Enabling and disabling tools
+
+Toggle a tool's `enabled` flag in `TOOLS_CONFIG`. A disabled tool is never registered, so it does not appear in `tools/list` at all:
 
 ```ts
 export const TOOLS_CONFIG = {
-  // ── Harvest connection ────────────────────────────────────────────────────
-  test_harvest_api: {
-    description:
-      'Test the Harvest API connection by fetching the current user details',
-    enabled: true,
-  },
-  // ── Projects ──────────────────────────────────────────────────────────────
   list_projects: {
-    description:
-      'List all projects, optionally filtered by active status or client',
+    description: 'List all projects, optionally filtered by active status or client',
     enabled: true,
   },
   get_project: {
     description: 'Retrieve a specific project by ID',
-    enabled: true,
+    enabled: false, // hidden from the assistant
   },
-  // ── Tasks ─────────────────────────────────────────────────────────────────
-  list_tasks: {
-    description: 'List all tasks, optionally filtered by active status',
-    enabled: true,
-  },
-  get_task: {
-    description: 'Retrieve a specific task by ID',
-    enabled: true,
-  },
-  // ── Users ─────────────────────────────────────────────────────────────────
-  list_users: {
-    description: 'List all users, optionally filtered by active status',
-    enabled: true,
-  },
-  get_current_user: {
-    description: 'Retrieve the currently authenticated user',
-    enabled: true,
-  },
-  get_user: {
-    description: 'Retrieve a specific user by ID',
-    enabled: true,
-  },
-  // ── User assignments ──────────────────────────────────────────────────────
-  list_user_assignments: {
-    description:
-      'List user assignments across all projects or for a specific project',
-    enabled: true,
-  },
-  // ── Time entries ──────────────────────────────────────────────────────────
-  list_time_entries: {
-    description:
-      'List time entries, optionally filtered by user, client, project, task, date range, billed state, running state or approval status',
-    enabled: true,
-  },
-  get_time_entry: {
-    description: 'Retrieve a specific time entry by ID',
-    enabled: true,
-  },
-  // ── Time reports ──────────────────────────────────────────────────────────
-  report_time_clients: {
-    description:
-      'Time report totalling tracked hours and billable amounts per client over a date range',
-    enabled: true,
-  },
-  report_time_projects: {
-    description:
-      'Time report totalling tracked hours and billable amounts per project over a date range. Pass include_forecast to also return each project’s scheduled Forecast hours',
-    enabled: true,
-  },
-  report_time_tasks: {
-    description:
-      'Time report totalling tracked hours and billable amounts per task over a date range',
-    enabled: true,
-  },
-  report_time_team: {
-    description:
-      'Time report totalling tracked hours and billable amounts per team member over a date range. Pass include_forecast to also return each user’s scheduled Forecast hours',
-    enabled: true,
-  },
+  // ...
 } satisfies Record<string, { description: string; enabled: boolean }>;
 ```
 
-After changing the configuration, rebuild the project and Docker image for the changes to take effect.
+Rebuild after any change for it to take effect.
 
 ## Using a Pre-built Image from GitHub Actions
 
-Every pull request and merge to `main` produces a Docker image artifact. This is the easiest way to get started without needing Node.js or a local build environment.
+Every pull request and merge to `main` typechecks, builds, and uploads a Docker image artifact. This is the easiest way to get started without a local Node.js toolchain.
 
 1. Go to the **Actions** tab in the GitHub repository.
 2. Select the latest passing **Build Docker Image** workflow run.
 3. Under **Artifacts**, download `forecast-mcp-docker-image`.
-4. Unzip the downloaded file and load the image into Docker:
+4. Unzip it, then load and verify the image:
 
 ```bash
 docker load < forecast-mcp.tar.gz
-```
-
-5. Verify the image is available:
-
-```bash
 docker images forecast-mcp
 ```
 
-You can then use the image in your Claude Desktop configuration as described below.
-
 ## Claude Desktop Configuration
 
-To use the MCP Server in Claude Desktop, add the following to your configuration. See: https://modelcontextprotocol.io/docs/develop/connect-local-servers
+Add the following to your Claude Desktop configuration — see [Connect local servers](https://modelcontextprotocol.io/docs/develop/connect-local-servers). The `-e` flags forward the credentials into the container:
 
 ```json
 "mcpServers": {
@@ -172,4 +113,12 @@ To use the MCP Server in Claude Desktop, add the following to your configuration
 }
 ```
 
-Your Harvest account ID and personal access token can be found at https://id.getharvest.com/developers. You must have a `manager` or `administrator` role in Harvest to use the MCP Server.
+To run the bundle directly instead of through Docker, point `command` at `node` and `args` at the absolute path to `build/index.mjs`.
+
+## Development Notes
+
+The server is built on [`@modelcontextprotocol/server`](https://ts.sdk.modelcontextprotocol.io/v2/) v2 and speaks MCP over stdio:
+
+- [`src/index.ts`](src/index.ts) — tool config, plus `serveStdio(createServer)` and signal handling. `serveStdio` takes a server *factory*; it builds one instance per connection and negotiates the protocol version.
+- [`src/tools.ts`](src/tools.ts) — the shared Harvest fetch helper and every `registerTool` call. Tool inputs are Zod v4 object schemas, which the SDK converts to JSON Schema and validates before a handler runs.
+- Because stdout carries the JSON-RPC stream, all logging must go to stderr. Use `console.error`, never `console.log`.
