@@ -47,6 +47,27 @@ export const TOOLS_CONFIG = {
       'List user assignments across all projects or for a specific project',
     enabled: true,
   },
+  // ── Time reports ──────────────────────────────────────────────────────────
+  report_time_clients: {
+    description:
+      'Time report totalling tracked hours and billable amounts per client over a date range',
+    enabled: true,
+  },
+  report_time_projects: {
+    description:
+      'Time report totalling tracked hours and billable amounts per project over a date range. Pass include_forecast to also return each project’s scheduled Forecast hours',
+    enabled: true,
+  },
+  report_time_tasks: {
+    description:
+      'Time report totalling tracked hours and billable amounts per task over a date range',
+    enabled: true,
+  },
+  report_time_team: {
+    description:
+      'Time report totalling tracked hours and billable amounts per team member over a date range. Pass include_forecast to also return each user’s scheduled Forecast hours',
+    enabled: true,
+  },
 } satisfies Record<string, { description: string; enabled: boolean }>;
 
 const server = new McpServer({

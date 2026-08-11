@@ -260,4 +260,122 @@ export function registerTools(server: McpServer, config: ToolsConfig) {
       },
     );
   }
+
+  if (config.report_time_clients.enabled) {
+    server.tool(
+      'report_time_clients',
+      config.report_time_clients.description,
+      {
+        from: z.string().describe('Report on time entries spent on or after this date (YYYY-MM-DD)'),
+        to: z.string().describe('Report on time entries spent on or before this date (YYYY-MM-DD). The range cannot exceed 365 days'),
+        include_fixed_fee: z.boolean().optional().describe('When true, billable amounts are calculated and included for fixed fee projects'),
+        page: z.number().optional().describe('Page number'),
+        per_page: z.number().min(1).max(2000).optional().describe('Records per page (max 2000)'),
+      },
+      { readOnlyHint: true },
+      async ({ from, to, include_fixed_fee, page, per_page }) => {
+        try {
+          const params: Record<string, string> = { from, to };
+          if (include_fixed_fee !== undefined) params.include_fixed_fee = String(include_fixed_fee);
+          if (page !== undefined) params.page = String(page);
+          if (per_page !== undefined) params.per_page = String(per_page);
+          return ok(await harvestFetch('reports/time/clients', params));
+        } catch (error) {
+          return err(error);
+        }
+      },
+    );
+  }
+
+  if (config.report_time_projects.enabled) {
+    server.tool(
+      'report_time_projects',
+      config.report_time_projects.description,
+      {
+        from: z.string().describe('Report on time entries spent on or after this date (YYYY-MM-DD)'),
+        to: z.string().describe('Report on time entries spent on or before this date (YYYY-MM-DD). The range cannot exceed 365 days'),
+        include_fixed_fee: z.boolean().optional().describe('When true, billable amounts are calculated and included for fixed fee projects'),
+        include_forecast: z
+          .boolean()
+          .optional()
+          .describe(
+            'When true, each result gains a scheduled_hours field holding the scheduled Forecast hours for the project over the timeframe — use this to retrieve scheduled forecast hours alongside tracked hours. Requires the account to be connected to Forecast; null when the project has no Forecast assignments',
+          ),
+        page: z.number().optional().describe('Page number'),
+        per_page: z.number().min(1).max(2000).optional().describe('Records per page (max 2000)'),
+      },
+      { readOnlyHint: true },
+      async ({ from, to, include_fixed_fee, include_forecast, page, per_page }) => {
+        try {
+          const params: Record<string, string> = { from, to };
+          if (include_fixed_fee !== undefined) params.include_fixed_fee = String(include_fixed_fee);
+          if (include_forecast !== undefined) params.include_forecast = String(include_forecast);
+          if (page !== undefined) params.page = String(page);
+          if (per_page !== undefined) params.per_page = String(per_page);
+          return ok(await harvestFetch('reports/time/projects', params));
+        } catch (error) {
+          return err(error);
+        }
+      },
+    );
+  }
+
+  if (config.report_time_tasks.enabled) {
+    server.tool(
+      'report_time_tasks',
+      config.report_time_tasks.description,
+      {
+        from: z.string().describe('Report on time entries spent on or after this date (YYYY-MM-DD)'),
+        to: z.string().describe('Report on time entries spent on or before this date (YYYY-MM-DD). The range cannot exceed 365 days'),
+        include_fixed_fee: z.boolean().optional().describe('When true, billable amounts are calculated and included for fixed fee projects'),
+        page: z.number().optional().describe('Page number'),
+        per_page: z.number().min(1).max(2000).optional().describe('Records per page (max 2000)'),
+      },
+      { readOnlyHint: true },
+      async ({ from, to, include_fixed_fee, page, per_page }) => {
+        try {
+          const params: Record<string, string> = { from, to };
+          if (include_fixed_fee !== undefined) params.include_fixed_fee = String(include_fixed_fee);
+          if (page !== undefined) params.page = String(page);
+          if (per_page !== undefined) params.per_page = String(per_page);
+          return ok(await harvestFetch('reports/time/tasks', params));
+        } catch (error) {
+          return err(error);
+        }
+      },
+    );
+  }
+
+  if (config.report_time_team.enabled) {
+    server.tool(
+      'report_time_team',
+      config.report_time_team.description,
+      {
+        from: z.string().describe('Report on time entries spent on or after this date (YYYY-MM-DD)'),
+        to: z.string().describe('Report on time entries spent on or before this date (YYYY-MM-DD). The range cannot exceed 365 days'),
+        include_fixed_fee: z.boolean().optional().describe('When true, billable amounts are calculated and included for fixed fee projects'),
+        include_forecast: z
+          .boolean()
+          .optional()
+          .describe(
+            'When true, each result gains a scheduled_hours field holding the user’s scheduled Forecast hours over the timeframe — use this to retrieve scheduled forecast hours alongside tracked hours. Requires the account to be connected to Forecast; null when the user has no Forecast assignments',
+          ),
+        page: z.number().optional().describe('Page number'),
+        per_page: z.number().min(1).max(2000).optional().describe('Records per page (max 2000)'),
+      },
+      { readOnlyHint: true },
+      async ({ from, to, include_fixed_fee, include_forecast, page, per_page }) => {
+        try {
+          const params: Record<string, string> = { from, to };
+          if (include_fixed_fee !== undefined) params.include_fixed_fee = String(include_fixed_fee);
+          if (include_forecast !== undefined) params.include_forecast = String(include_forecast);
+          if (page !== undefined) params.page = String(page);
+          if (per_page !== undefined) params.per_page = String(per_page);
+          return ok(await harvestFetch('reports/time/team', params));
+        } catch (error) {
+          return err(error);
+        }
+      },
+    );
+  }
 }

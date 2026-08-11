@@ -1,6 +1,8 @@
 # Forecast/Harvest MCP Server
 
-A MCP (Model Context Protocol) server that exposes Harvest API data to AI assistants such as Claude. It provides read access to projects, tasks, users, and user assignments, with write operations available but disabled by default.
+A MCP (Model Context Protocol) server that exposes Harvest API data to AI assistants such as Claude. It provides read access to projects, tasks, users, user assignments, and time reports, with write operations available but disabled by default.
+
+Time reports can optionally include scheduled hours from Forecast: pass `include_forecast: true` to `report_time_projects` or `report_time_team` to return a `scheduled_hours` field alongside tracked hours. This requires the Harvest account to be connected to Forecast.
 
 ## Prerequisites
 
@@ -89,6 +91,27 @@ export const TOOLS_CONFIG = {
   list_user_assignments: {
     description:
       'List user assignments across all projects or for a specific project',
+    enabled: true,
+  },
+  // ── Time reports ──────────────────────────────────────────────────────────
+  report_time_clients: {
+    description:
+      'Time report totalling tracked hours and billable amounts per client over a date range',
+    enabled: true,
+  },
+  report_time_projects: {
+    description:
+      'Time report totalling tracked hours and billable amounts per project over a date range. Pass include_forecast to also return each project’s scheduled Forecast hours',
+    enabled: true,
+  },
+  report_time_tasks: {
+    description:
+      'Time report totalling tracked hours and billable amounts per task over a date range',
+    enabled: true,
+  },
+  report_time_team: {
+    description:
+      'Time report totalling tracked hours and billable amounts per team member over a date range. Pass include_forecast to also return each user’s scheduled Forecast hours',
     enabled: true,
   },
 } satisfies Record<string, { description: string; enabled: boolean }>;
