@@ -1,6 +1,6 @@
 # Forecast/Harvest MCP Server
 
-A MCP (Model Context Protocol) server that exposes Harvest API data to AI assistants such as Claude. It provides read access to projects, tasks, users, user assignments, and time reports, with write operations available but disabled by default.
+A MCP (Model Context Protocol) server that exposes Harvest API data to AI assistants such as Claude. It provides read access to projects, tasks, users, user assignments, time entries, and time reports.
 
 Time reports can optionally include scheduled hours from Forecast: pass `include_forecast: true` to `report_time_projects` or `report_time_team` to return a `scheduled_hours` field alongside tracked hours. This requires the Harvest account to be connected to Forecast.
 
@@ -45,7 +45,7 @@ docker build -t forecast-mcp .
 
 ## Available Tools
 
-All tools are read-only by default. Write operations (create, update, delete) exist in the configuration but are not supported at this time. You can enable or disable individual tools in `src/index.ts` by toggling the `enabled` flag:
+Every tool is read-only. The shared fetch helper issues `GET` requests only, so Harvest's write endpoints (create, update, delete, and the timer restart/stop actions) are deliberately not exposed. You can enable or disable individual tools in `src/index.ts` by toggling the `enabled` flag:
 
 ```ts
 export const TOOLS_CONFIG = {
@@ -91,6 +91,16 @@ export const TOOLS_CONFIG = {
   list_user_assignments: {
     description:
       'List user assignments across all projects or for a specific project',
+    enabled: true,
+  },
+  // ── Time entries ──────────────────────────────────────────────────────────
+  list_time_entries: {
+    description:
+      'List time entries, optionally filtered by user, client, project, task, date range, billed state, running state or approval status',
+    enabled: true,
+  },
+  get_time_entry: {
+    description: 'Retrieve a specific time entry by ID',
     enabled: true,
   },
   // ── Time reports ──────────────────────────────────────────────────────────

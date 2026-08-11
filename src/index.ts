@@ -47,6 +47,16 @@ export const TOOLS_CONFIG = {
       'List user assignments across all projects or for a specific project',
     enabled: true,
   },
+  // ── Time entries ──────────────────────────────────────────────────────────
+  list_time_entries: {
+    description:
+      'List time entries, optionally filtered by user, client, project, task, date range, billed state, running state or approval status',
+    enabled: true,
+  },
+  get_time_entry: {
+    description: 'Retrieve a specific time entry by ID',
+    enabled: true,
+  },
   // ── Time reports ──────────────────────────────────────────────────────────
   report_time_clients: {
     description:

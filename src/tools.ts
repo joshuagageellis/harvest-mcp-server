@@ -261,6 +261,61 @@ export function registerTools(server: McpServer, config: ToolsConfig) {
     );
   }
 
+  if (config.list_time_entries.enabled) {
+    server.tool(
+      'list_time_entries',
+      config.list_time_entries.description,
+      {
+        user_id: z.number().optional().describe('Filter by user ID'),
+        client_id: z.number().optional().describe('Filter by client ID'),
+        project_id: z.number().optional().describe('Filter by project ID'),
+        task_id: z.number().optional().describe('Filter by task ID'),
+        external_reference_id: z.string().optional().describe('Filter by external reference ID'),
+        is_billed: z.boolean().optional().describe('Pass true for invoiced entries only, false for uninvoiced entries'),
+        is_running: z.boolean().optional().describe('Pass true for running entries only, false for non-running entries'),
+        approval_status: z
+          .enum(['unsubmitted', 'submitted', 'approved'])
+          .optional()
+          .describe('Filter by approval status'),
+        from: z.string().optional().describe('Only entries with a spent_date on or after this date (YYYY-MM-DD)'),
+        to: z.string().optional().describe('Only entries with a spent_date on or before this date (YYYY-MM-DD)'),
+        updated_since: z.string().optional().describe('Filter by modification date (ISO 8601)'),
+        page: z.number().optional().describe('Page number'),
+        per_page: z.number().min(1).max(2000).optional().describe('Records per page (max 2000)'),
+      },
+      { readOnlyHint: true },
+      async (args) => {
+        try {
+          const params: Record<string, string> = {};
+          for (const [key, value] of Object.entries(args)) {
+            if (value !== undefined) params[key] = String(value);
+          }
+          return ok(await harvestFetch('time_entries', params));
+        } catch (error) {
+          return err(error);
+        }
+      },
+    );
+  }
+
+  if (config.get_time_entry.enabled) {
+    server.tool(
+      'get_time_entry',
+      config.get_time_entry.description,
+      {
+        time_entry_id: z.number().describe('The time entry ID'),
+      },
+      { readOnlyHint: true },
+      async ({ time_entry_id }) => {
+        try {
+          return ok(await harvestFetch(`time_entries/${time_entry_id}`));
+        } catch (error) {
+          return err(error);
+        }
+      },
+    );
+  }
+
   if (config.report_time_clients.enabled) {
     server.tool(
       'report_time_clients',
