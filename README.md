@@ -1,6 +1,6 @@
 # Forecast/Harvest MCP Server
 
-A MCP (Model Context Protocol) server that exposes Harvest API data to AI assistants such as Claude. It provides read access to projects, users, and user assignments, with write operations available but disabled by default.
+A MCP (Model Context Protocol) server that exposes Harvest API data to AI assistants such as Claude. It provides read access to projects, tasks, users, and user assignments, with write operations available but disabled by default.
 
 ## Prerequisites
 
@@ -61,6 +61,15 @@ export const TOOLS_CONFIG = {
   },
   get_project: {
     description: 'Retrieve a specific project by ID',
+    enabled: true,
+  },
+  // ── Tasks ─────────────────────────────────────────────────────────────────
+  list_tasks: {
+    description: 'List all tasks, optionally filtered by active status',
+    enabled: true,
+  },
+  get_task: {
+    description: 'Retrieve a specific task by ID',
     enabled: true,
   },
   // ── Users ─────────────────────────────────────────────────────────────────

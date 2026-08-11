@@ -2,8 +2,9 @@
   "name": "forecast",
   "version": "1.0.0",
   "main": "index.js",
+  "packageManager": "pnpm@11.6.0",
   "bin": {
-    "weather": "./build/index.js"
+    "forecast": "./build/index.js"
   },
   "scripts": {
     "build": "esbuild src/index.ts --bundle --platform=node --target=node16 --outfile=build/index.js && chmod 755 build/index.js"

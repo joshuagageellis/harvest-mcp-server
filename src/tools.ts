@@ -125,6 +125,50 @@ export function registerTools(server: McpServer, config: ToolsConfig) {
     );
   }
 
+  if (config.list_tasks.enabled) {
+    server.tool(
+      'list_tasks',
+      config.list_tasks.description,
+      {
+        is_active: z.boolean().optional().describe('Filter by active status'),
+        updated_since: z.string().optional().describe('Filter by modification date (ISO 8601)'),
+        page: z.number().optional().describe('Page number (deprecated by Harvest)'),
+        per_page: z.number().min(1).max(2000).optional().describe('Records per page (max 2000)'),
+      },
+      { readOnlyHint: true },
+      async ({ is_active, updated_since, page, per_page }) => {
+        try {
+          const params: Record<string, string> = {};
+          if (is_active !== undefined) params.is_active = String(is_active);
+          if (updated_since !== undefined) params.updated_since = updated_since;
+          if (page !== undefined) params.page = String(page);
+          if (per_page !== undefined) params.per_page = String(per_page);
+          return ok(await harvestFetch('tasks', params));
+        } catch (error) {
+          return err(error);
+        }
+      },
+    );
+  }
+
+  if (config.get_task.enabled) {
+    server.tool(
+      'get_task',
+      config.get_task.description,
+      {
+        task_id: z.number().describe('The task ID'),
+      },
+      { readOnlyHint: true },
+      async ({ task_id }) => {
+        try {
+          return ok(await harvestFetch(`tasks/${task_id}`));
+        } catch (error) {
+          return err(error);
+        }
+      },
+    );
+  }
+
   if (config.list_users.enabled) {
     server.tool(
       'list_users',

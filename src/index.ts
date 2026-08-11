@@ -19,6 +19,15 @@ export const TOOLS_CONFIG = {
     description: 'Retrieve a specific project by ID',
     enabled: true,
   },
+  // ── Tasks ─────────────────────────────────────────────────────────────────
+  list_tasks: {
+    description: 'List all tasks, optionally filtered by active status',
+    enabled: true,
+  },
+  get_task: {
+    description: 'Retrieve a specific task by ID',
+    enabled: true,
+  },
   // ── Users ─────────────────────────────────────────────────────────────────
   list_users: {
     description: 'List all users, optionally filtered by active status',

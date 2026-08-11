@@ -1,0 +1,4 @@
+allowBuilds:
+  esbuild: true
+# For security, require a week (in minutes) before allowing an updated package version.
+minimumReleaseAge: 10080
