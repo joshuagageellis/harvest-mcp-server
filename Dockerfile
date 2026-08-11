@@ -4,6 +4,6 @@ LABEL name="forecast-mcp"
 
 WORKDIR /app
 
-COPY build/index.js .
+COPY build/index.mjs .
 
-CMD ["node", "index.js"]
+CMD ["node", "index.mjs"]

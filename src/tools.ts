@@ -1,4 +1,4 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { HARVEST_API_ENDPOINT, HarvestAccountID, AuthorizationBearer } from './config.js';
 import type { ToolsConfig } from './config.js';
@@ -67,7 +67,7 @@ export function registerTools(server: McpServer, config: ToolsConfig) {
       'test_harvest_api',
       {
         description: config.test_harvest_api.description,
-        inputSchema: {},
+        inputSchema: z.object({}),
         annotations: { readOnlyHint: true },
       },
       async () => {
@@ -86,13 +86,13 @@ export function registerTools(server: McpServer, config: ToolsConfig) {
       'list_projects',
       {
         description: config.list_projects.description,
-        inputSchema: {
+        inputSchema: z.object({
           is_active: z.boolean().optional().describe('Filter by active status'),
           client_id: z.number().optional().describe('Filter by client ID'),
           updated_since: z.string().optional().describe('Filter by modification date (ISO 8601)'),
           page: z.number().optional().describe('Page number'),
           per_page: z.number().min(1).max(2000).optional().describe('Records per page (max 2000)'),
-        },
+        }),
         annotations: { readOnlyHint: true },
       },
       async ({ is_active, client_id, updated_since, page, per_page }) => {
@@ -116,9 +116,9 @@ export function registerTools(server: McpServer, config: ToolsConfig) {
       'get_project',
       {
         description: config.get_project.description,
-        inputSchema: {
+        inputSchema: z.object({
           project_id: z.number().describe('The project ID'),
-        },
+        }),
         annotations: { readOnlyHint: true },
       },
       async ({ project_id }) => {
@@ -136,12 +136,12 @@ export function registerTools(server: McpServer, config: ToolsConfig) {
       'list_tasks',
       {
         description: config.list_tasks.description,
-        inputSchema: {
+        inputSchema: z.object({
           is_active: z.boolean().optional().describe('Filter by active status'),
           updated_since: z.string().optional().describe('Filter by modification date (ISO 8601)'),
           page: z.number().optional().describe('Page number (deprecated by Harvest)'),
           per_page: z.number().min(1).max(2000).optional().describe('Records per page (max 2000)'),
-        },
+        }),
         annotations: { readOnlyHint: true },
       },
       async ({ is_active, updated_since, page, per_page }) => {
@@ -164,9 +164,9 @@ export function registerTools(server: McpServer, config: ToolsConfig) {
       'get_task',
       {
         description: config.get_task.description,
-        inputSchema: {
+        inputSchema: z.object({
           task_id: z.number().describe('The task ID'),
-        },
+        }),
         annotations: { readOnlyHint: true },
       },
       async ({ task_id }) => {
@@ -184,12 +184,12 @@ export function registerTools(server: McpServer, config: ToolsConfig) {
       'list_users',
       {
         description: config.list_users.description,
-        inputSchema: {
+        inputSchema: z.object({
           is_active: z.boolean().optional().describe('Filter by active status'),
           updated_since: z.string().optional().describe('Filter by modification date (ISO 8601)'),
           page: z.number().optional().describe('Page number'),
           per_page: z.number().min(1).max(2000).optional().describe('Records per page (max 2000)'),
-        },
+        }),
         annotations: { readOnlyHint: true },
       },
       async ({ is_active, updated_since, page, per_page }) => {
@@ -212,7 +212,7 @@ export function registerTools(server: McpServer, config: ToolsConfig) {
       'get_current_user',
       {
         description: config.get_current_user.description,
-        inputSchema: {},
+        inputSchema: z.object({}),
         annotations: { readOnlyHint: true },
       },
       async () => {
@@ -230,9 +230,9 @@ export function registerTools(server: McpServer, config: ToolsConfig) {
       'get_user',
       {
         description: config.get_user.description,
-        inputSchema: {
+        inputSchema: z.object({
           user_id: z.number().describe('The user ID'),
-        },
+        }),
         annotations: { readOnlyHint: true },
       },
       async ({ user_id }) => {
@@ -250,14 +250,14 @@ export function registerTools(server: McpServer, config: ToolsConfig) {
       'list_user_assignments',
       {
         description: config.list_user_assignments.description,
-        inputSchema: {
+        inputSchema: z.object({
           project_id: z.number().optional().describe('Filter to a specific project'),
           user_id: z.number().optional().describe('Filter by user ID'),
           is_active: z.boolean().optional().describe('Filter by active status'),
           updated_since: z.string().optional().describe('Filter by modification date (ISO 8601)'),
           page: z.number().optional().describe('Page number'),
           per_page: z.number().min(1).max(2000).optional().describe('Records per page (max 2000)'),
-        },
+        }),
         annotations: { readOnlyHint: true },
       },
       async ({ project_id, user_id, is_active, updated_since, page, per_page }) => {
@@ -284,7 +284,7 @@ export function registerTools(server: McpServer, config: ToolsConfig) {
       'list_time_entries',
       {
         description: config.list_time_entries.description,
-        inputSchema: {
+        inputSchema: z.object({
           user_id: z.number().optional().describe('Filter by user ID'),
           client_id: z.number().optional().describe('Filter by client ID'),
           project_id: z.number().optional().describe('Filter by project ID'),
@@ -301,7 +301,7 @@ export function registerTools(server: McpServer, config: ToolsConfig) {
           updated_since: z.string().optional().describe('Filter by modification date (ISO 8601)'),
           page: z.number().optional().describe('Page number'),
           per_page: z.number().min(1).max(2000).optional().describe('Records per page (max 2000)'),
-        },
+        }),
         annotations: { readOnlyHint: true },
       },
       async (args) => {
@@ -323,9 +323,9 @@ export function registerTools(server: McpServer, config: ToolsConfig) {
       'get_time_entry',
       {
         description: config.get_time_entry.description,
-        inputSchema: {
+        inputSchema: z.object({
           time_entry_id: z.number().describe('The time entry ID'),
-        },
+        }),
         annotations: { readOnlyHint: true },
       },
       async ({ time_entry_id }) => {
@@ -343,13 +343,13 @@ export function registerTools(server: McpServer, config: ToolsConfig) {
       'report_time_clients',
       {
         description: config.report_time_clients.description,
-        inputSchema: {
+        inputSchema: z.object({
           from: z.string().describe('Report on time entries spent on or after this date (YYYY-MM-DD)'),
           to: z.string().describe('Report on time entries spent on or before this date (YYYY-MM-DD). The range cannot exceed 365 days'),
           include_fixed_fee: z.boolean().optional().describe('When true, billable amounts are calculated and included for fixed fee projects'),
           page: z.number().optional().describe('Page number'),
           per_page: z.number().min(1).max(2000).optional().describe('Records per page (max 2000)'),
-        },
+        }),
         annotations: { readOnlyHint: true },
       },
       async ({ from, to, include_fixed_fee, page, per_page }) => {
@@ -371,7 +371,7 @@ export function registerTools(server: McpServer, config: ToolsConfig) {
       'report_time_projects',
       {
         description: config.report_time_projects.description,
-        inputSchema: {
+        inputSchema: z.object({
           from: z.string().describe('Report on time entries spent on or after this date (YYYY-MM-DD)'),
           to: z.string().describe('Report on time entries spent on or before this date (YYYY-MM-DD). The range cannot exceed 365 days'),
           include_fixed_fee: z.boolean().optional().describe('When true, billable amounts are calculated and included for fixed fee projects'),
@@ -383,7 +383,7 @@ export function registerTools(server: McpServer, config: ToolsConfig) {
             ),
           page: z.number().optional().describe('Page number'),
           per_page: z.number().min(1).max(2000).optional().describe('Records per page (max 2000)'),
-        },
+        }),
         annotations: { readOnlyHint: true },
       },
       async ({ from, to, include_fixed_fee, include_forecast, page, per_page }) => {
@@ -406,13 +406,13 @@ export function registerTools(server: McpServer, config: ToolsConfig) {
       'report_time_tasks',
       {
         description: config.report_time_tasks.description,
-        inputSchema: {
+        inputSchema: z.object({
           from: z.string().describe('Report on time entries spent on or after this date (YYYY-MM-DD)'),
           to: z.string().describe('Report on time entries spent on or before this date (YYYY-MM-DD). The range cannot exceed 365 days'),
           include_fixed_fee: z.boolean().optional().describe('When true, billable amounts are calculated and included for fixed fee projects'),
           page: z.number().optional().describe('Page number'),
           per_page: z.number().min(1).max(2000).optional().describe('Records per page (max 2000)'),
-        },
+        }),
         annotations: { readOnlyHint: true },
       },
       async ({ from, to, include_fixed_fee, page, per_page }) => {
@@ -434,7 +434,7 @@ export function registerTools(server: McpServer, config: ToolsConfig) {
       'report_time_team',
       {
         description: config.report_time_team.description,
-        inputSchema: {
+        inputSchema: z.object({
           from: z.string().describe('Report on time entries spent on or after this date (YYYY-MM-DD)'),
           to: z.string().describe('Report on time entries spent on or before this date (YYYY-MM-DD). The range cannot exceed 365 days'),
           include_fixed_fee: z.boolean().optional().describe('When true, billable amounts are calculated and included for fixed fee projects'),
@@ -446,7 +446,7 @@ export function registerTools(server: McpServer, config: ToolsConfig) {
             ),
           page: z.number().optional().describe('Page number'),
           per_page: z.number().min(1).max(2000).optional().describe('Records per page (max 2000)'),
-        },
+        }),
         annotations: { readOnlyHint: true },
       },
       async ({ from, to, include_fixed_fee, include_forecast, page, per_page }) => {

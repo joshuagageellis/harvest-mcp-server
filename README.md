@@ -6,7 +6,7 @@ Time reports can optionally include scheduled hours from Forecast: pass `include
 
 ## Prerequisites
 
-- Node.js 16 or later
+- Node.js 20 or later
 - Docker (for containerised deployment)
 - A Harvest account with API credentials
 
@@ -26,7 +26,7 @@ npm install
 npm run build
 ```
 
-This outputs a bundled `build/index.js` using esbuild.
+This outputs a bundled `build/index.mjs` using esbuild.
 
 To build the Docker image, run the provided script:
 

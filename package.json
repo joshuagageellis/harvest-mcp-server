@@ -1,14 +1,18 @@
 {
   "name": "forecast",
   "version": "1.0.0",
-  "main": "index.js",
+  "type": "module",
+  "main": "build/index.mjs",
   "packageManager": "pnpm@11.6.0",
+  "engines": {
+    "node": ">=20"
+  },
   "bin": {
-    "forecast": "./build/index.js"
+    "forecast": "./build/index.mjs"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "build": "esbuild src/index.ts --bundle --platform=node --target=node16 --outfile=build/index.js && chmod 755 build/index.js"
+    "build": "esbuild src/index.ts --bundle --platform=node --format=esm --target=node20 --outfile=build/index.mjs && chmod 755 build/index.mjs"
   },
   "files": [
     "build"
@@ -17,12 +21,12 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.27.1",
+    "@modelcontextprotocol/server": "^2.0.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@types/node": "^25.4.0",
-    "esbuild": "^0.27.3",
-    "typescript": "^5.9.3"
+    "@types/node": "^26.1.2",
+    "esbuild": "^0.28.1",
+    "typescript": "^7.0.2"
   }
 }

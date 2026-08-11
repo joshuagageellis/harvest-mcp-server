@@ -1,5 +1,5 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { McpServer } from '@modelcontextprotocol/server';
+import { serveStdio } from '@modelcontextprotocol/server/stdio';
 import { registerTools } from './tools.js';
 
 export const TOOLS_CONFIG = {
@@ -80,21 +80,21 @@ export const TOOLS_CONFIG = {
   },
 } satisfies Record<string, { description: string; enabled: boolean }>;
 
-const server = new McpServer({
-  name: 'forecast',
-  version: '1.0.0',
-  description: 'A MCP server for the Forecast and Harvest APIs',
-});
-
-registerTools(server, TOOLS_CONFIG);
-
-async function main() {
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
-  console.error('Forecast MCP Server running on stdio');
+function createServer() {
+  const server = new McpServer({
+    name: 'forecast',
+    version: '1.0.0',
+    description: 'A MCP server for the Forecast and Harvest APIs',
+  });
+  registerTools(server, TOOLS_CONFIG);
+  return server;
 }
 
-main().catch((error) => {
-  console.error('Fatal error in main():', error);
-  process.exit(1);
-});
+const handle = serveStdio(createServer);
+console.error('Forecast MCP Server running on stdio');
+
+for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+  process.on(signal, () => {
+    void handle.close().then(() => process.exit(0));
+  });
+}
