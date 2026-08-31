@@ -2,6 +2,16 @@ import { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { HARVEST_API_ENDPOINT, HarvestAccountID, AuthorizationBearer } from './config.js';
 import type { ToolsConfig } from './config.js';
+import {
+  listAssignments,
+  listClients,
+  listForecastProjects,
+  listMilestones,
+  listPeople,
+  listPlaceholders,
+  listRoles,
+  whoami,
+} from './forecast.js';
 
 // ── Shared fetch helper ───────────────────────────────────────────────────────
 
@@ -58,6 +68,8 @@ function err(error: unknown) {
     isError: true,
   };
 }
+
+const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 // ── Tool registration ─────────────────────────────────────────────────────────
 
@@ -457,6 +469,182 @@ export function registerTools(server: McpServer, config: ToolsConfig) {
           if (page !== undefined) params.page = String(page);
           if (per_page !== undefined) params.per_page = String(per_page);
           return ok(await harvestFetch('reports/time/team', params));
+        } catch (error) {
+          return err(error);
+        }
+      },
+    );
+  }
+
+  // ── Forecast ────────────────────────────────────────────────────────────────
+  //
+  // Harvest is what was actually burned; Forecast is what is scheduled. These
+  // tools hit https://api.forecastapp.com with the same personal access token
+  // and return raw seconds — conversion to hours is left to the caller so the
+  // numbers can be reconciled against Forecast's own UI.
+
+  if (config.forecast__test_connection.enabled) {
+    server.registerTool(
+      'forecast__test_connection',
+      {
+        description: config.forecast__test_connection.description,
+        inputSchema: z.object({}),
+        annotations: { readOnlyHint: true },
+      },
+      async () => {
+        try {
+          return ok({ success: true, whoami: await whoami() });
+        } catch (error) {
+          return err(error);
+        }
+      },
+    );
+  }
+
+  if (config.forecast__list_assignments.enabled) {
+    server.registerTool(
+      'forecast__list_assignments',
+      {
+        description: config.forecast__list_assignments.description,
+        inputSchema: z.object({
+          start_date: z
+            .string()
+            .regex(DATE, 'Must be YYYY-MM-DD')
+            .describe('Start of the window to pull assignments for (YYYY-MM-DD). Required — the unbounded response is too large to be usable'),
+          end_date: z
+            .string()
+            .regex(DATE, 'Must be YYYY-MM-DD')
+            .describe('End of the window to pull assignments for (YYYY-MM-DD), inclusive. Required — the unbounded response is too large to be usable'),
+          project_id: z.number().optional().describe('Filter to a Forecast project id (not the Harvest project id — see forecast__list_forecast_projects.harvest_id)'),
+          person_id: z.number().optional().describe('Filter to a Forecast person id (not the Harvest user id — see forecast__list_people.harvest_user_id)'),
+          state: z.string().optional().describe('Filter by assignment state, e.g. "active"'),
+        }),
+        annotations: { readOnlyHint: true },
+      },
+      async ({ start_date, end_date, project_id, person_id, state }) => {
+        try {
+          if (start_date > end_date) {
+            throw new Error(
+              `start_date (${start_date}) must be on or before end_date (${end_date})`,
+            );
+          }
+          const params: Record<string, string> = { start_date, end_date };
+          if (project_id !== undefined) params.project_id = String(project_id);
+          if (person_id !== undefined) params.person_id = String(person_id);
+          if (state !== undefined) params.state = state;
+          return ok(await listAssignments(params));
+        } catch (error) {
+          return err(error);
+        }
+      },
+    );
+  }
+
+  if (config.forecast__list_people.enabled) {
+    server.registerTool(
+      'forecast__list_people',
+      {
+        description: config.forecast__list_people.description,
+        inputSchema: z.object({}),
+        annotations: { readOnlyHint: true },
+      },
+      async () => {
+        try {
+          return ok(await listPeople());
+        } catch (error) {
+          return err(error);
+        }
+      },
+    );
+  }
+
+  if (config.forecast__list_forecast_projects.enabled) {
+    server.registerTool(
+      'forecast__list_forecast_projects',
+      {
+        description: config.forecast__list_forecast_projects.description,
+        inputSchema: z.object({}),
+        annotations: { readOnlyHint: true },
+      },
+      async () => {
+        try {
+          return ok(await listForecastProjects());
+        } catch (error) {
+          return err(error);
+        }
+      },
+    );
+  }
+
+  if (config.forecast__list_placeholders.enabled) {
+    server.registerTool(
+      'forecast__list_placeholders',
+      {
+        description: config.forecast__list_placeholders.description,
+        inputSchema: z.object({}),
+        annotations: { readOnlyHint: true },
+      },
+      async () => {
+        try {
+          return ok(await listPlaceholders());
+        } catch (error) {
+          return err(error);
+        }
+      },
+    );
+  }
+
+  if (config.forecast__list_clients.enabled) {
+    server.registerTool(
+      'forecast__list_clients',
+      {
+        description: config.forecast__list_clients.description,
+        inputSchema: z.object({}),
+        annotations: { readOnlyHint: true },
+      },
+      async () => {
+        try {
+          return ok(await listClients());
+        } catch (error) {
+          return err(error);
+        }
+      },
+    );
+  }
+
+  if (config.forecast__list_roles.enabled) {
+    server.registerTool(
+      'forecast__list_roles',
+      {
+        description: config.forecast__list_roles.description,
+        inputSchema: z.object({}),
+        annotations: { readOnlyHint: true },
+      },
+      async () => {
+        try {
+          return ok(await listRoles());
+        } catch (error) {
+          return err(error);
+        }
+      },
+    );
+  }
+
+  if (config.forecast__list_milestones.enabled) {
+    server.registerTool(
+      'forecast__list_milestones',
+      {
+        description: config.forecast__list_milestones.description,
+        inputSchema: z.object({
+          project_id: z.number().optional().describe('Filter to a Forecast project id. Omit to return every milestone on the account'),
+        }),
+        annotations: { readOnlyHint: true },
+      },
+      async ({ project_id }) => {
+        try {
+          const params: Record<string, string> = {};
+          if (project_id !== undefined) params.project_id = String(project_id);
+          return ok(await listMilestones(params));
         } catch (error) {
           return err(error);
         }

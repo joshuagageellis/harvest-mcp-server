@@ -1,8 +1,13 @@
 # Forecast/Harvest MCP Server
 
-A MCP (Model Context Protocol) server that exposes Harvest API data to AI assistants such as Claude. It provides read access to projects, tasks, users, user assignments, time entries, and time reports.
+A MCP (Model Context Protocol) server that exposes Harvest and Harvest Forecast data to AI assistants such as Claude.
 
-Every tool is read-only. The shared fetch helper issues `GET` requests only, so Harvest's write endpoints (create, update, delete, and the timer restart/stop actions) are deliberately not exposed.
+The two APIs answer different questions and the server exposes both:
+
+- **Harvest** (`list_*`, `report_time_*`) — what was actually burned: projects, tasks, users, project membership, time entries, and time reports.
+- **Forecast** (`forecast__*`) — what is *scheduled*: allocations, people and their capacity, placeholders, milestones, and time off.
+
+Every tool is read-only. Both fetch helpers issue `GET` requests only, so the write endpoints (create, update, delete, and the timer restart/stop actions) are deliberately not exposed.
 
 ## Prerequisites
 
@@ -13,12 +18,24 @@ Every tool is read-only. The shared fetch helper issues `GET` requests only, so 
 
 ## Environment Variables
 
-| Variable              | Description                        |
-| --------------------- | ---------------------------------- |
-| `HarvestAccountID`    | Your Harvest account ID            |
-| `AuthorizationBearer` | Your Harvest personal access token |
+| Variable              | Description                                                     |
+| --------------------- | --------------------------------------------------------------- |
+| `HarvestAccountID`    | Your Harvest account ID                                           |
+| `ForecastAccountID`   | Your Forecast account ID — required only by the `forecast__` tools |
+| `AuthorizationBearer` | Your Harvest personal access token — authenticates **both** APIs   |
 
-Both are read at startup in [`src/config.ts`](src/config.ts). Create them at https://id.getharvest.com/developers.
+All three are read at startup in [`src/config.ts`](src/config.ts). Create the token at https://id.getharvest.com/developers.
+
+`ForecastAccountID` is **not** the same number as `HarvestAccountID`. It is the numeric id in the Forecast web URL (`https://forecastapp.com/<ForecastAccountID>/schedule/team`). To get both ids for a token:
+
+```bash
+curl -s https://id.getharvest.com/api/v2/accounts \
+  -H "Authorization: Bearer $AuthorizationBearer" -H "User-Agent: forecast-mcp"
+```
+
+The response lists one entry per account with a `product` field of either `harvest` or `forecast`. `forecast__test_connection` confirms the pair resolves once configured.
+
+The Harvest tools work without `ForecastAccountID`; only the `forecast__` tools fail, and they say so explicitly rather than returning empty results.
 
 ## Building
 
@@ -48,6 +65,16 @@ To rebuild the container from scratch — this removes any existing `forecast-mc
 | Time entries     | `list_time_entries`, `get_time_entry`                                                   |
 | Time reports     | `report_time_clients`, `report_time_projects`, `report_time_tasks`, `report_time_team`  |
 
+### Forecast tools
+
+| Area         | Tools                                                                        |
+| ------------ | ---------------------------------------------------------------------------- |
+| Connection   | `forecast__test_connection`                                                  |
+| Allocations  | `forecast__list_assignments`                                                 |
+| People       | `forecast__list_people`, `forecast__list_placeholders`                       |
+| Projects     | `forecast__list_forecast_projects`, `forecast__list_milestones`              |
+| Reference    | `forecast__list_clients`, `forecast__list_roles`                             |
+
 Each tool's description and its full set of parameters are the single source of truth in the code, and are what the AI assistant actually sees:
 
 - **Descriptions and enable/disable flags** — `TOOLS_CONFIG` in [`src/index.ts`](src/index.ts)
@@ -55,7 +82,39 @@ Each tool's description and its full set of parameters are the single source of 
 
 ### Scheduled Forecast hours
 
-`report_time_projects` and `report_time_team` accept `include_forecast: true`, which adds a `scheduled_hours` field alongside the tracked hours. This requires the Harvest account to be connected to Forecast; the field is `null` when there are no Forecast assignments.
+`report_time_projects` and `report_time_team` accept `include_forecast: true`, which adds a `scheduled_hours` field alongside the tracked hours. This requires the Harvest account to be connected to Forecast; the field is `null` when there are no Forecast assignments. That field is a single rolled-up total — use the `forecast__` tools when you need the underlying per-person, per-project allocations.
+
+## Working with Forecast data
+
+The Forecast API accepts the same personal access token as Harvest; only the base URL (`https://api.forecastapp.com`) and the account header (`Forecast-Account-Id`) differ. It is stable in practice but **is not officially documented or supported**, so [`src/forecast.ts`](src/forecast.ts) pins the response shape of every endpoint. Fields the tools depend on are required, anything else passes through untouched, and a shape change throws a named error rather than returning a half-understood payload that reads as authoritative.
+
+Four things are easy to get wrong.
+
+**`allocation` is seconds per working day.** It is not the total for the span. A person's hours in a week are:
+
+```
+allocation / 3600  ×  (their working days that fall inside start_date..end_date)
+```
+
+`start_date` and `end_date` are inclusive at both ends, and the per-weekday `working_days` booleans come from `forecast__list_people`.
+
+**A null `allocation` means a full day, not zero.** Substitute the person's default daily capacity (`weekly_capacity` ÷ their number of working days). Most time-off rows come back with a null allocation, so reading null as zero silently erases PTO and overstates available capacity.
+
+**Forecast ids are not Harvest ids.** `person_id` and `project_id` on an assignment are Forecast ids. Join to Harvest actuals through `forecast__list_people.harvest_user_id` and `forecast__list_forecast_projects.harvest_id`; email is the fallback join key and matching on name is a last resort. The account ids differ too — see the environment variables above.
+
+**A row with `placeholder_id` instead of `person_id` is an unnamed resource.** Forecast is already saying that slot needs a body, so reconcile against `forecast__list_placeholders` rather than recommending a duplicate hire.
+
+### Time off
+
+Forecast has no dedicated time-off endpoint. Time off is recorded as ordinary assignments against designated leave projects, so `forecast__list_assignments` already returns it — treat those assignments as reductions in available hours and never as demand.
+
+Resolve the leave project ids once with `forecast__list_forecast_projects` and record them alongside the roster the consuming skill reads, rather than pattern-matching project names at runtime.
+
+### Deliberate non-behaviours
+
+- **Raw seconds are returned, never hours.** Rounding in the server would lose the ability to reconcile against Forecast's own UI numbers.
+- **Archived records are not filtered out.** The flag is surfaced and the caller decides — a project archived mid-quarter still consumed capacity in the weeks before it was archived.
+- **`forecast__list_assignments` requires `start_date` and `end_date`.** The unbounded response is large enough to be unusable in a tool response.
 
 ### Enabling and disabling tools
 
@@ -102,11 +161,13 @@ Add the following to your Claude Desktop configuration — see [Connect local se
     "args": [
       "run", "--rm", "-i",
       "-e", "HarvestAccountID",
+      "-e", "ForecastAccountID",
       "-e", "AuthorizationBearer",
       "forecast-mcp"
     ],
     "env": {
       "HarvestAccountID": "your-harvest-account-id",
+      "ForecastAccountID": "your-forecast-account-id",
       "AuthorizationBearer": "your-personal-access-token"
     }
   }
@@ -120,5 +181,6 @@ To run the bundle directly instead of through Docker, point `command` at `node` 
 The server is built on [`@modelcontextprotocol/server`](https://ts.sdk.modelcontextprotocol.io/v2/) v2 and speaks MCP over stdio:
 
 - [`src/index.ts`](src/index.ts) — tool config, plus `serveStdio(createServer)` and signal handling. `serveStdio` takes a server *factory*; it builds one instance per connection and negotiates the protocol version.
-- [`src/tools.ts`](src/tools.ts) — the shared Harvest fetch helper and every `registerTool` call. Tool inputs are Zod v4 object schemas, which the SDK converts to JSON Schema and validates before a handler runs.
+- [`src/tools.ts`](src/tools.ts) — the shared Harvest fetch helper and every `registerTool` call, for both APIs. Tool inputs are Zod v4 object schemas, which the SDK converts to JSON Schema and validates before a handler runs.
+- [`src/forecast.ts`](src/forecast.ts) — the Forecast fetch helper and the pinned response schemas. Add a field here when Forecast adds one you need to depend on; unknown fields already pass through, so this is only for fields whose *absence* should be an error.
 - Because stdout carries the JSON-RPC stream, all logging must go to stderr. Use `console.error`, never `console.log`.
