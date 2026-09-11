@@ -7,7 +7,7 @@ The two APIs answer different questions and the server exposes both:
 - **Harvest** (`list_*`, `report_time_*`) — what was actually burned: projects, tasks, users, project membership, time entries, and time reports.
 - **Forecast** (`forecast__*`) — what is *scheduled*: allocations, people and their capacity, placeholders, milestones, and time off.
 
-Every tool is read-only. Both fetch helpers issue `GET` requests only, so the write endpoints (create, update, delete, and the timer restart/stop actions) are deliberately not exposed.
+Every Forecast tool is read-only. Harvest is read-only apart from the timesheet writes — `create_time_entry`, `update_time_entry`, `delete_time_entry`, `restart_time_entry` and `stop_time_entry` — which let an assistant record time against a project on your behalf. Those five are registered without `readOnlyHint`, so an MCP host that gates writes will prompt before each one. No other Harvest write endpoint is exposed: projects, tasks, clients, users and invoices remain read-only.
 
 ## Prerequisites
 
@@ -62,7 +62,9 @@ To rebuild the container from scratch — this removes any existing `forecast-mc
 | Tasks            | `list_tasks`, `get_task`                                                                |
 | Users            | `list_users`, `get_user`, `get_current_user`                                            |
 | User assignments | `list_user_assignments`                                                                 |
+| Task assignments | `list_task_assignments`                                                                 |
 | Time entries     | `list_time_entries`, `get_time_entry`                                                   |
+| Timesheet writes | `create_time_entry`, `update_time_entry`, `delete_time_entry`, `restart_time_entry`, `stop_time_entry` |
 | Time reports     | `report_time_clients`, `report_time_projects`, `report_time_tasks`, `report_time_team`  |
 
 ### Forecast tools
@@ -83,6 +85,20 @@ Each tool's description and its full set of parameters are the single source of 
 ### Scheduled Forecast hours
 
 `report_time_projects` and `report_time_team` accept `include_forecast: true`, which adds a `scheduled_hours` field alongside the tracked hours. This requires the Harvest account to be connected to Forecast; the field is `null` when there are no Forecast assignments. That field is a single rolled-up total — use the `forecast__` tools when you need the underlying per-person, per-project allocations.
+
+## Recording time
+
+`create_time_entry` writes to a timesheet. It defaults to the authenticated user's own timesheet; passing `user_id` logs on someone else's behalf and needs a manager or administrator role.
+
+Three things determine whether the write is accepted:
+
+- **`task_id` must be assigned to the project.** Harvest rejects a task that exists on the account but is not on that project, so resolve the id with `list_task_assignments` (scoped by `project_id`), not `list_tasks`.
+- **The duration field depends on the account.** A Harvest account tracks time *either* by duration *or* by start and end time. Pass `hours` (decimal — `1.5` is 90 minutes) on a duration account, or `started_time`/`ended_time` (`"8:00am"`) on a start-and-end-time account. Passing both is rejected locally before the request is made; passing the wrong one for the account comes back as a `422` from Harvest, and the fix is to retry with the other shape.
+- **Omitting the duration starts a timer.** A create with neither `hours` nor `started_time` leaves a *running* entry rather than a completed one. Stop it with `stop_time_entry` — `list_time_entries` with `is_running: true` finds it.
+
+`delete_time_entry` is permanent, and Harvest refuses it outright once an entry has been invoiced or approved. It returns the deleted entry rather than the empty body Harvest's docs describe, so the response is a record of what was removed. `restart_time_entry` only works on entries spent today.
+
+Harvest's API has no timesheet-submission endpoint, so submitting a timesheet for approval is still a thing to do in the Harvest UI.
 
 ## Working with Forecast data
 
@@ -115,6 +131,8 @@ Resolve the leave project ids once with `forecast__list_forecast_projects` and r
 - **Raw seconds are returned, never hours.** Rounding in the server would lose the ability to reconcile against Forecast's own UI numbers.
 - **Archived records are not filtered out.** The flag is surfaced and the caller decides — a project archived mid-quarter still consumed capacity in the weeks before it was archived.
 - **`forecast__list_assignments` requires `start_date` and `end_date`.** The unbounded response is large enough to be unusable in a tool response.
+- **Only time entries can be written.** The timesheet writes are the whole write surface; creating projects, tasks, clients or invoices stays out of the server, as does writing back to Forecast — an assignment is a scheduling decision, not something to change as a side effect of a question.
+- **Omitted optional fields are dropped, not sent as null.** `update_time_entry` only changes the fields you pass, so a partial update never blanks a note or a duration you did not mention.
 
 ### Enabling and disabling tools
 

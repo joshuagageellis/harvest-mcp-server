@@ -47,6 +47,12 @@ export const TOOLS_CONFIG = {
       'List user assignments across all projects or for a specific project',
     enabled: true,
   },
+  // ── Task assignments ──────────────────────────────────────────────────────
+  list_task_assignments: {
+    description:
+      'List the tasks assigned to a project — the valid task_id values for logging time against it, with their billable and hourly-rate defaults. Use this, not list_tasks, to resolve the task_id for create_time_entry',
+    enabled: true,
+  },
   // ── Time entries ──────────────────────────────────────────────────────────
   list_time_entries: {
     description:
@@ -55,6 +61,34 @@ export const TOOLS_CONFIG = {
   },
   get_time_entry: {
     description: 'Retrieve a specific time entry by ID',
+    enabled: true,
+  },
+  // ── Timesheet writes ──────────────────────────────────────────────────────
+  create_time_entry: {
+    description:
+      'Record a time entry on a Harvest timesheet — defaults to your own (the authenticated user) unless user_id is passed. ' +
+      'Requires project_id, task_id and spent_date. task_id must be a task ASSIGNED to that project: resolve it with list_task_assignments, not list_tasks. ' +
+      'Supply hours for a duration-tracking account, or started_time/ended_time for a start-and-end-time account — never both. ' +
+      'Omitting the duration starts a running timer rather than logging a completed entry',
+    enabled: true,
+  },
+  update_time_entry: {
+    description:
+      'Update an existing time entry — its project, task, date, duration or notes. Only the fields you pass are changed',
+    enabled: true,
+  },
+  delete_time_entry: {
+    description:
+      'Permanently delete a time entry. Harvest will refuse if the entry has been invoiced or approved',
+    enabled: true,
+  },
+  restart_time_entry: {
+    description:
+      'Restart a stopped time entry, resuming its timer. Harvest only allows this for entries spent today',
+    enabled: true,
+  },
+  stop_time_entry: {
+    description: 'Stop a running time entry, fixing its duration at the elapsed time',
     enabled: true,
   },
   // ── Time reports ──────────────────────────────────────────────────────────

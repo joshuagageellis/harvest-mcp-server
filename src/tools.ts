@@ -15,7 +15,13 @@ import {
 
 // ── Shared fetch helper ───────────────────────────────────────────────────────
 
-async function harvestFetch(path: string, params?: Record<string, string>) {
+type HarvestMethod = 'GET' | 'POST' | 'PATCH' | 'DELETE';
+
+async function harvestRequest(
+  method: HarvestMethod,
+  path: string,
+  options: { params?: Record<string, string>; body?: unknown } = {},
+) {
   if (!HarvestAccountID || !AuthorizationBearer) {
     throw new Error(
       'Missing required environment variables: HarvestAccountID and/or AuthorizationBearer',
@@ -23,20 +29,21 @@ async function harvestFetch(path: string, params?: Record<string, string>) {
   }
 
   const url = new URL(`${HARVEST_API_ENDPOINT}${path}`);
-  if (params) {
-    for (const [key, value] of Object.entries(params)) {
+  if (options.params) {
+    for (const [key, value] of Object.entries(options.params)) {
       url.searchParams.set(key, value);
     }
   }
 
   const response = await fetch(url.toString(), {
-    method: 'GET',
+    method,
     headers: {
       Authorization: `Bearer ${AuthorizationBearer}`,
       'Harvest-Account-ID': HarvestAccountID,
       'User-Agent': 'Forecast MCP Server',
       'Content-Type': 'application/json',
     },
+    body: options.body === undefined ? undefined : JSON.stringify(options.body),
   });
 
   if (!response.ok) {
@@ -46,7 +53,22 @@ async function harvestFetch(path: string, params?: Record<string, string>) {
     );
   }
 
-  return response.json();
+  // Harvest's time-entry DELETE actually returns 200 with the full deleted
+  // entry, despite the docs describing an empty body — so the body is parsed
+  // and returned when there is one. The empty case is still handled: .json()
+  // on an empty body throws, which would fail a write that in fact succeeded.
+  const text = await response.text();
+  if (!text) return { success: true, status: response.status };
+  return JSON.parse(text);
+}
+
+function harvestFetch(path: string, params?: Record<string, string>) {
+  return harvestRequest('GET', path, { params });
+}
+
+/** Drops undefined keys so an omitted optional never overwrites a Harvest field. */
+function body(fields: Record<string, unknown>) {
+  return Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== undefined));
 }
 
 function ok(data: unknown) {
@@ -645,6 +667,239 @@ export function registerTools(server: McpServer, config: ToolsConfig) {
           const params: Record<string, string> = {};
           if (project_id !== undefined) params.project_id = String(project_id);
           return ok(await listMilestones(params));
+        } catch (error) {
+          return err(error);
+        }
+      },
+    );
+  }
+
+  // ── Harvest: task assignments ───────────────────────────────────────────────
+  //
+  // A project only accepts time against the tasks assigned to it, and the
+  // task_assignment carries the billable/hourly-rate defaults. Resolve the
+  // task_id here before calling create_time_entry — a plain list_tasks id may
+  // not be assigned to the project and the write will be rejected.
+
+  if (config.list_task_assignments.enabled) {
+    server.registerTool(
+      'list_task_assignments',
+      {
+        description: config.list_task_assignments.description,
+        inputSchema: z.object({
+          project_id: z
+            .number()
+            .optional()
+            .describe('Filter to a specific project. Omit to return task assignments across every project'),
+          is_active: z.boolean().optional().describe('Filter by active status'),
+          updated_since: z.string().optional().describe('Filter by modification date (ISO 8601)'),
+          page: z.number().optional().describe('Page number'),
+          per_page: z.number().min(1).max(2000).optional().describe('Records per page (max 2000)'),
+        }),
+        annotations: { readOnlyHint: true },
+      },
+      async ({ project_id, is_active, updated_since, page, per_page }) => {
+        try {
+          const path = project_id
+            ? `projects/${project_id}/task_assignments`
+            : 'task_assignments';
+          const params: Record<string, string> = {};
+          if (is_active !== undefined) params.is_active = String(is_active);
+          if (updated_since !== undefined) params.updated_since = updated_since;
+          if (page !== undefined) params.page = String(page);
+          if (per_page !== undefined) params.per_page = String(per_page);
+          return ok(await harvestFetch(path, params));
+        } catch (error) {
+          return err(error);
+        }
+      },
+    );
+  }
+
+  // ── Harvest: timesheet writes ───────────────────────────────────────────────
+  //
+  // Everything above reads. These four write to a real timesheet, so they are
+  // registered without readOnlyHint and the host will prompt before each one.
+  //
+  // Harvest accounts are configured to track time EITHER by duration OR by
+  // start/end time, and the create endpoint takes a different shape for each —
+  // `hours` for a duration account, `started_time`/`ended_time` for a
+  // start-and-end-time account. get_account_settings-style info is not exposed
+  // here, so if a create is rejected with a 422 mentioning the wrong field,
+  // retry with the other shape rather than assuming the entry failed for
+  // another reason.
+
+  if (config.create_time_entry.enabled) {
+    server.registerTool(
+      'create_time_entry',
+      {
+        description: config.create_time_entry.description,
+        inputSchema: z.object({
+          project_id: z.number().describe('The project to log against (a Harvest project id — see list_projects)'),
+          task_id: z
+            .number()
+            .describe('The task to log against. Must be a task ASSIGNED to this project — resolve it with list_task_assignments, not list_tasks'),
+          spent_date: z
+            .string()
+            .regex(DATE, 'Must be YYYY-MM-DD')
+            .describe('The date the time was spent (YYYY-MM-DD)'),
+          hours: z
+            .number()
+            .positive()
+            .optional()
+            .describe('Duration in decimal hours, e.g. 1.5 for 90 minutes. For a duration-tracking account. Omit to start a running timer'),
+          started_time: z
+            .string()
+            .optional()
+            .describe('Start time, e.g. "8:00am". For a start-and-end-time account. Omit to start a running timer'),
+          ended_time: z
+            .string()
+            .optional()
+            .describe('End time, e.g. "3:00pm". For a start-and-end-time account. Omit to leave the timer running'),
+          notes: z.string().optional().describe('Notes describing the work — what appears on the timesheet line'),
+          user_id: z
+            .number()
+            .optional()
+            .describe('Log on behalf of another user. Omit to log to your own timesheet (the authenticated user); passing someone else requires admin or manager permission'),
+          external_reference: z
+            .object({
+              id: z.string().describe('The id of the linked record in the external system'),
+              group_id: z.string().describe('The id of the group the linked record belongs to'),
+              account_id: z.string().optional().describe('The id of the external account'),
+              permalink: z.string().describe('A URL back to the linked record'),
+            })
+            .optional()
+            .describe('Link the entry to a record in another system'),
+        }),
+        annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
+      },
+      async ({ project_id, task_id, spent_date, hours, started_time, ended_time, notes, user_id, external_reference }) => {
+        try {
+          // Harvest rejects the mixed shape with an opaque 422; say why up front.
+          if (hours !== undefined && (started_time !== undefined || ended_time !== undefined)) {
+            throw new Error(
+              'Pass either hours (duration-tracking account) or started_time/ended_time ' +
+                '(start-and-end-time account), not both.',
+            );
+          }
+          if (ended_time !== undefined && started_time === undefined) {
+            throw new Error('ended_time requires started_time.');
+          }
+          return ok(
+            await harvestRequest('POST', 'time_entries', {
+              body: body({
+                project_id,
+                task_id,
+                spent_date,
+                hours,
+                started_time,
+                ended_time,
+                notes,
+                user_id,
+                external_reference,
+              }),
+            }),
+          );
+        } catch (error) {
+          return err(error);
+        }
+      },
+    );
+  }
+
+  if (config.update_time_entry.enabled) {
+    server.registerTool(
+      'update_time_entry',
+      {
+        description: config.update_time_entry.description,
+        inputSchema: z.object({
+          time_entry_id: z.number().describe('The time entry to update — see list_time_entries'),
+          project_id: z.number().optional().describe('Move the entry to a different project'),
+          task_id: z
+            .number()
+            .optional()
+            .describe('Move the entry to a different task. Must be a task assigned to the entry’s project'),
+          spent_date: z
+            .string()
+            .regex(DATE, 'Must be YYYY-MM-DD')
+            .optional()
+            .describe('Change the date the time was spent (YYYY-MM-DD)'),
+          hours: z.number().positive().optional().describe('Change the duration, in decimal hours'),
+          started_time: z.string().optional().describe('Change the start time, e.g. "8:00am"'),
+          ended_time: z.string().optional().describe('Change the end time, e.g. "3:00pm"'),
+          notes: z.string().optional().describe('Replace the notes on the entry'),
+        }),
+        annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+      },
+      async ({ time_entry_id, ...fields }) => {
+        try {
+          const payload = body(fields);
+          if (Object.keys(payload).length === 0) {
+            throw new Error('Pass at least one field to change.');
+          }
+          return ok(
+            await harvestRequest('PATCH', `time_entries/${time_entry_id}`, { body: payload }),
+          );
+        } catch (error) {
+          return err(error);
+        }
+      },
+    );
+  }
+
+  if (config.delete_time_entry.enabled) {
+    server.registerTool(
+      'delete_time_entry',
+      {
+        description: config.delete_time_entry.description,
+        inputSchema: z.object({
+          time_entry_id: z.number().describe('The time entry to delete — see list_time_entries'),
+        }),
+        annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
+      },
+      async ({ time_entry_id }) => {
+        try {
+          return ok(await harvestRequest('DELETE', `time_entries/${time_entry_id}`));
+        } catch (error) {
+          return err(error);
+        }
+      },
+    );
+  }
+
+  if (config.restart_time_entry.enabled) {
+    server.registerTool(
+      'restart_time_entry',
+      {
+        description: config.restart_time_entry.description,
+        inputSchema: z.object({
+          time_entry_id: z.number().describe('The stopped time entry to restart'),
+        }),
+        annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+      },
+      async ({ time_entry_id }) => {
+        try {
+          return ok(await harvestRequest('PATCH', `time_entries/${time_entry_id}/restart`));
+        } catch (error) {
+          return err(error);
+        }
+      },
+    );
+  }
+
+  if (config.stop_time_entry.enabled) {
+    server.registerTool(
+      'stop_time_entry',
+      {
+        description: config.stop_time_entry.description,
+        inputSchema: z.object({
+          time_entry_id: z.number().describe('The running time entry to stop'),
+        }),
+        annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+      },
+      async ({ time_entry_id }) => {
+        try {
+          return ok(await harvestRequest('PATCH', `time_entries/${time_entry_id}/stop`));
         } catch (error) {
           return err(error);
         }
