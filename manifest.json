@@ -1,0 +1,56 @@
+{
+  "manifest_version": "0.3",
+  "name": "forecast",
+  "display_name": "Forecast & Harvest",
+  "version": "1.0.0",
+  "description": "Harvest time tracking and Harvest Forecast scheduled allocations.",
+  "long_description": "Exposes two Harvest APIs side by side: **Harvest** for what was actually burned — projects, tasks, users, time entries and time reports — and **Forecast** for what is *scheduled* — allocations, people and their capacity, placeholders, milestones and time off.\n\nEverything is read-only apart from five timesheet write tools (`create_time_entry`, `update_time_entry`, `delete_time_entry`, `restart_time_entry`, `stop_time_entry`), which let the assistant record time on your behalf and prompt before each write. No other Harvest write endpoint is exposed.",
+  "author": {
+    "name": "Joshua Ellis"
+  },
+  "license": "ISC",
+  "keywords": ["harvest", "forecast", "time tracking", "capacity planning", "resourcing"],
+  "server": {
+    "type": "node",
+    "entry_point": "build/index.mjs",
+    "mcp_config": {
+      "command": "node",
+      "args": ["${__dirname}/build/index.mjs"],
+      "env": {
+        "HarvestAccountID": "${user_config.harvest_account_id}",
+        "ForecastAccountID": "${user_config.forecast_account_id}",
+        "AuthorizationBearer": "${user_config.authorization_bearer}"
+      }
+    }
+  },
+  "user_config": {
+    "authorization_bearer": {
+      "type": "string",
+      "title": "Harvest personal access token",
+      "description": "Create one at https://id.getharvest.com/developers. The same token authenticates both the Harvest and the Forecast API.",
+      "sensitive": true,
+      "required": true
+    },
+    "harvest_account_id": {
+      "type": "string",
+      "title": "Harvest account ID",
+      "description": "Shown next to the token at https://id.getharvest.com/developers, under the account with a product of 'harvest'.",
+      "sensitive": false,
+      "required": true
+    },
+    "forecast_account_id": {
+      "type": "string",
+      "title": "Forecast account ID",
+      "description": "A different number from the Harvest account ID: it is the numeric id in the Forecast web URL, https://forecastapp.com/<id>/schedule/team. Leave blank to use the Harvest tools only — the forecast__ tools will then report that it is missing.",
+      "sensitive": false,
+      "required": false
+    }
+  },
+  "compatibility": {
+    "claude_desktop": ">=0.10.0",
+    "platforms": ["darwin", "win32", "linux"],
+    "runtimes": {
+      "node": ">=20.0.0"
+    }
+  }
+}

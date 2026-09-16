@@ -1,4 +1,4 @@
-name: Build Docker Image
+name: Build
 
 on:
   pull_request:
@@ -9,7 +9,8 @@ on:
       - main
 
 jobs:
-  build:
+  bundle:
+    name: Claude Desktop bundle
     runs-on: ubuntu-latest
 
     steps:
@@ -22,7 +23,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '23'
+          node-version: '24'
           cache: 'pnpm'
 
       - name: Install dependencies
@@ -30,6 +31,36 @@ jobs:
 
       - name: Typecheck
         run: pnpm run typecheck
+
+      - name: Build and pack
+        run: pnpm run bundle
+
+      - name: Upload bundle artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: forecast-mcpb
+          path: forecast.mcpb
+          retention-days: 90
+
+  docker:
+    name: Docker image
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
 
       - name: Build
         run: pnpm run build

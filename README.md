@@ -11,10 +11,13 @@ Every Forecast tool is read-only. Harvest is read-only apart from the timesheet 
 
 ## Prerequisites
 
-- Node.js 20 or later — [`.nvmrc`](.nvmrc) pins the version used for local development
-- pnpm (the repo sets `packageManager`, so `corepack enable` is enough)
-- Docker, for containerised deployment
 - A Harvest account with API credentials, and a `manager` or `administrator` role
+
+That is the whole list for installing the packaged `.mcpb` bundle into Claude Desktop: Desktop supplies the Node runtime and the bundle has no dependencies to install, so neither Docker nor a local toolchain is involved. To build from source you also need:
+
+- Node.js — [`.nvmrc`](.nvmrc) pins the version used for local development and CI, currently the latest release. The build targets Node 20, so the *output* runs on anything from 20 up; the pin is the toolchain, not the floor
+- pnpm (the repo sets `packageManager`, so `corepack enable` is enough)
+- Docker, only if you want the optional container image
 
 ## Environment Variables
 
@@ -25,6 +28,8 @@ Every Forecast tool is read-only. Harvest is read-only apart from the timesheet 
 | `AuthorizationBearer` | Your Harvest personal access token — authenticates **both** APIs   |
 
 All three are read at startup in [`src/config.ts`](src/config.ts). Create the token at https://id.getharvest.com/developers.
+
+You only set these yourself when running the server directly. Installing the `.mcpb` bundle asks for the same three values in the install dialog and passes them through as these variables, keeping the token in the OS keychain rather than in a config file.
 
 `ForecastAccountID` is **not** the same number as `HarvestAccountID`. It is the numeric id in the Forecast web URL (`https://forecastapp.com/<ForecastAccountID>/schedule/team`). To get both ids for a token:
 
@@ -43,15 +48,81 @@ The Harvest tools work without `ForecastAccountID`; only the `forecast__` tools 
 pnpm install
 pnpm run typecheck   # tsc --noEmit
 pnpm run build       # bundles to build/index.mjs via esbuild
+pnpm run bundle      # build, then pack forecast.mcpb for Claude Desktop
 ```
 
-The build is a single ESM bundle, so the Docker image needs nothing but that one file. `pnpm run typecheck` is the same check CI runs.
+The build is a single self-contained ESM bundle. Nothing but that one file is needed at runtime — no `node_modules`, no install step, no container.
 
-To rebuild the container from scratch — this removes any existing `forecast-mcp` container and image, rebuilds the bundle, then builds a fresh image tagged `forecast-mcp`:
+`pnpm run bundle` wraps it as an [MCP Bundle](https://github.com/anthropics/mcpb): [`scripts/pack-mcpb.mjs`](scripts/pack-mcpb.mjs) stages [`manifest.json`](manifest.json) and the bundle in a clean `dist-mcpb/` directory and packs them into `forecast.mcpb`. Staging rather than packing the repo root is deliberate — `.env`, `.git` and the sources cannot be swept into a file that gets passed around. The manifest's tool list is generated from `TOOLS_CONFIG` at pack time, so what the install dialog lists cannot drift from what the server registers.
+
+`pnpm run typecheck` is the same check CI runs.
+
+The container image is optional and no longer the recommended path. To rebuild it from scratch — this removes any existing `forecast-mcp` container and image, rebuilds the bundle, then builds a fresh image tagged `forecast-mcp`:
 
 ```bash
 ./docker-build.sh
 ```
+
+## Installing in Claude Desktop
+
+### The packaged bundle (recommended)
+
+The server ships as an `.mcpb` bundle, which Claude Desktop installs by double-click. No Docker, no terminal, no hand-edited JSON.
+
+1. Get `forecast.mcpb` — either build it with `pnpm run bundle`, or download it from CI: the **Actions** tab → the latest passing **Build** run → the `forecast-mcpb` artifact (unzip it to get the `.mcpb`).
+2. Double-click `forecast.mcpb`, or drag it onto Claude Desktop. An install dialog opens listing the tools it registers.
+3. Fill in the three fields the dialog asks for — the token, the Harvest account id, and the Forecast account id. The token is stored in the OS keychain rather than in a config file.
+4. Enable the extension. Claude Desktop starts the server on demand.
+
+Leaving the Forecast account id blank is supported: the Harvest tools work, and the `forecast__` tools report the missing id rather than failing obscurely.
+
+To change a credential later, open **Settings → Extensions → Forecast & Harvest** and edit it there.
+
+### Manual stdio configuration
+
+If you would rather wire it up by hand — or you are using a host other than Claude Desktop — point the config at the built bundle with `node`. In Claude Desktop that file is `~/Library/Application Support/Claude/claude_desktop_config.json` on macOS and `%APPDATA%\Claude\claude_desktop_config.json` on Windows; see [Connect local servers](https://modelcontextprotocol.io/docs/develop/connect-local-servers).
+
+```json
+"mcpServers": {
+  "forecast": {
+    "command": "node",
+    "args": ["/absolute/path/to/forecast/build/index.mjs"],
+    "env": {
+      "HarvestAccountID": "your-harvest-account-id",
+      "ForecastAccountID": "your-forecast-account-id",
+      "AuthorizationBearer": "your-personal-access-token"
+    }
+  }
+}
+```
+
+The path must be absolute — the host does not run the command from the repo directory. The bundle carries a shebang and is executable, so `"command": "/absolute/path/to/forecast/build/index.mjs"` with no `args` works too.
+
+### Docker (optional)
+
+The container image still works and is built by CI, but it is no longer needed. The `-e` flags forward the credentials into the container:
+
+```json
+"mcpServers": {
+  "forecast": {
+    "command": "docker",
+    "args": [
+      "run", "--rm", "-i",
+      "-e", "HarvestAccountID",
+      "-e", "ForecastAccountID",
+      "-e", "AuthorizationBearer",
+      "forecast-mcp"
+    ],
+    "env": {
+      "HarvestAccountID": "your-harvest-account-id",
+      "ForecastAccountID": "your-forecast-account-id",
+      "AuthorizationBearer": "your-personal-access-token"
+    }
+  }
+}
+```
+
+Load a CI-built image with `docker load < forecast-mcp.tar.gz`, from the `forecast-mcp-docker-image` artifact.
 
 ## Available Tools
 
@@ -79,7 +150,7 @@ To rebuild the container from scratch — this removes any existing `forecast-mc
 
 Each tool's description and its full set of parameters are the single source of truth in the code, and are what the AI assistant actually sees:
 
-- **Descriptions and enable/disable flags** — `TOOLS_CONFIG` in [`src/index.ts`](src/index.ts)
+- **Descriptions and enable/disable flags** — `TOOLS_CONFIG` in [`src/tools-config.ts`](src/tools-config.ts)
 - **Parameters and validation schemas** — `registerTools` in [`src/tools.ts`](src/tools.ts)
 
 ### Scheduled Forecast hours
@@ -136,7 +207,7 @@ Resolve the leave project ids once with `forecast__list_forecast_projects` and r
 
 ### Enabling and disabling tools
 
-Toggle a tool's `enabled` flag in `TOOLS_CONFIG`. A disabled tool is never registered, so it does not appear in `tools/list` at all:
+Toggle a tool's `enabled` flag in `TOOLS_CONFIG` ([`src/tools-config.ts`](src/tools-config.ts)). A disabled tool is never registered, so it does not appear in `tools/list` at all, and it is left out of the bundle manifest:
 
 ```ts
 export const TOOLS_CONFIG = {
@@ -152,53 +223,15 @@ export const TOOLS_CONFIG = {
 } satisfies Record<string, { description: string; enabled: boolean }>;
 ```
 
-Rebuild after any change for it to take effect.
-
-## Using a Pre-built Image from GitHub Actions
-
-Every pull request and merge to `main` typechecks, builds, and uploads a Docker image artifact. This is the easiest way to get started without a local Node.js toolchain.
-
-1. Go to the **Actions** tab in the GitHub repository.
-2. Select the latest passing **Build Docker Image** workflow run.
-3. Under **Artifacts**, download `forecast-mcp-docker-image`.
-4. Unzip it, then load and verify the image:
-
-```bash
-docker load < forecast-mcp.tar.gz
-docker images forecast-mcp
-```
-
-## Claude Desktop Configuration
-
-Add the following to your Claude Desktop configuration — see [Connect local servers](https://modelcontextprotocol.io/docs/develop/connect-local-servers). The `-e` flags forward the credentials into the container:
-
-```json
-"mcpServers": {
-  "forecast": {
-    "command": "docker",
-    "args": [
-      "run", "--rm", "-i",
-      "-e", "HarvestAccountID",
-      "-e", "ForecastAccountID",
-      "-e", "AuthorizationBearer",
-      "forecast-mcp"
-    ],
-    "env": {
-      "HarvestAccountID": "your-harvest-account-id",
-      "ForecastAccountID": "your-forecast-account-id",
-      "AuthorizationBearer": "your-personal-access-token"
-    }
-  }
-}
-```
-
-To run the bundle directly instead of through Docker, point `command` at `node` and `args` at the absolute path to `build/index.mjs`.
+Rebuild after any change for it to take effect — `pnpm run build`, or `pnpm run bundle` to refresh the Claude Desktop bundle too.
 
 ## Development Notes
 
 The server is built on [`@modelcontextprotocol/server`](https://ts.sdk.modelcontextprotocol.io/v2/) v2 and speaks MCP over stdio:
 
-- [`src/index.ts`](src/index.ts) — tool config, plus `serveStdio(createServer)` and signal handling. `serveStdio` takes a server *factory*; it builds one instance per connection and negotiates the protocol version.
+- [`src/index.ts`](src/index.ts) — `serveStdio(createServer)` and signal handling. `serveStdio` takes a server *factory*; it builds one instance per connection and negotiates the protocol version.
+- [`src/tools-config.ts`](src/tools-config.ts) — `TOOLS_CONFIG`: every tool's description and `enabled` flag. It is a module of its own so the bundle packer can read it without starting a server.
+- [`src/config.ts`](src/config.ts) — the three credentials. They are read through a helper that treats an empty, whitespace or unsubstituted `${user_config.x}` value as unset, so a blank field in the Desktop install dialog surfaces the tools' own "missing credential" message instead of a rejected API header.
 - [`src/tools.ts`](src/tools.ts) — the shared Harvest fetch helper and every `registerTool` call, for both APIs. Tool inputs are Zod v4 object schemas, which the SDK converts to JSON Schema and validates before a handler runs.
 - [`src/forecast.ts`](src/forecast.ts) — the Forecast fetch helper and the pinned response schemas. Add a field here when Forecast adds one you need to depend on; unknown fields already pass through, so this is only for fields whose *absence* should be an error.
 - Because stdout carries the JSON-RPC stream, all logging must go to stderr. Use `console.error`, never `console.log`.

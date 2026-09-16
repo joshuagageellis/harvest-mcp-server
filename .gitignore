@@ -2,3 +2,5 @@
 .claude/
 build/
 node_modules/
+dist-mcpb/
+*.mcpb
