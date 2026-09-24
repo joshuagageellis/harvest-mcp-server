@@ -8,6 +8,11 @@ on:
     branches:
       - main
 
+# Both jobs only read the repo and upload artifacts; artifact upload uses the
+# runner's own token, not GITHUB_TOKEN.
+permissions:
+  contents: read
+
 jobs:
   bundle:
     name: Claude Desktop bundle
